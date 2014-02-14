@@ -1,0 +1,17 @@
+int i;
+int j;
+float f;
+i = 10;
+print i;
+j = 20;
+print j;
+f = j;
+f = i / f;
+print f;
+i = j / i;
+print i;
+j = i / f;
+print j;
+f = 10;
+i = 111 / f;
+print i;

@@ -1,0 +1,11 @@
+/*Comments for the sake of comments*/
+
+int main (){
+  int x,y,z;
+  x = 4;
+  y = 2;
+  z = 1;
+  x = y; 
+  z = x + y + z;
+  out z;
+}

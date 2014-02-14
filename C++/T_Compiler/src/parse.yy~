@@ -1,0 +1,601 @@
+//Spring 2013
+// Jeremy Dobbins-Bucklad
+// The TC Compiler
+// Phase 3: Now with Classes!
+
+%{
+	#include <iostream>
+	using namespace std;
+
+	#include <stdio.h>
+	#include <stdlib.h>
+	#include <stddef.h>
+
+	#include "AST.h"
+	#include "Type.h"
+
+	//this routine is in scan.ll
+	int getCurrentSourceLineNumber();
+
+	// type module is in main.cxx
+	extern TypeModule* types;
+
+	// dump variables are in main.cxx
+	extern bool before;
+	extern bool after;
+	extern bool errors;
+
+	void yyerror(const char*);
+	extern int yyparse(void);
+	extern int yylex(void);
+%}
+
+%union { //types of semantic values
+       int value;
+       char* str;
+       AST_Program* program;
+       AST_MainFunction* mainFunction;
+       AST_StatementList* statementList;
+       AST_VarList* varList;
+       AST_Statement* statement;
+       AST_Declaration* declaration;
+       AST_Block* block;
+       AST_OutStatement* outStatement;
+       AST_ExpressionStatement* expStatement;
+       AST_WhileStatement* whileStatement;
+       AST_ReturnStatement* returnStatement;
+       AST_IfThenElseStatement* ifThenElseStatement;
+       AST_BreakStatement* breakStatement;
+       AST_ContinueStatement* continueStatement;
+       AST_EmptyStatement* emptyStatement;
+       AST_Expression* expression;
+       AST_IntegerLiteral* intLiteral;
+       Type* type;
+       /*Phase 3*/
+       AST_ClassList* classList;
+       AST_ClassDeclaration* classDeclaration;
+       AST_FieldAccess* fieldAccess;
+       //AST_This* astThis;
+       //AST_NullLiteral* nullLiteral;
+};
+
+%token <str> IDENTIFIER INT
+%token <value> INTEGER_LITERAL
+%token MAIN EQ_OP OUT
+//Phase 2
+%token IF ELSE WHILE RETURN
+%token BREAK CONTINUE
+//Phase 3
+%token <str> NULL_LITERAL
+%token CLASS EXTENDS NEW FIELD_REF
+//Phase 4
+%token THIS SUPER DELETE
+//Error token
+%token BAD
+
+%type <program> CompilationUnit Program
+%type <mainFunction> MainFunctionDeclaration
+%type <statementList> MainFunctionBody MainBlockStatements MainBlock BlockStatements
+ClassBody ClassBodyDeclarations
+%type <classList> ClassDeclarations
+%type <classDeclaration> ClassDeclaration
+%type <varList> VariableDeclarators
+%type <statement> BlockStatement    MainBlockStatement  Statement MainVariableDeclarationStatement
+%type <declaration> MainVariableDeclaration ClassBodyDeclaration ClassMemberDeclaration
+FieldDeclaration
+%type <block> Block
+%type <outStatement> OutStatement
+%type <ifThenElseStatement> IfThenElseStatement
+%type <whileStatement> WhileStatement
+%type <breakStatement> BreakStatement
+%type <continueStatement> ContinueStatement
+%type <emptyStatement> EmptyStatement
+%type <returnStatement> ReturnStatement
+%type <expStatement> ExpressionStatement
+%type <expression>      ParenExpression     StatementExpression     Expression
+AssignmentExpression    LeftHandSide        EqualityExpression
+RelationalExpression    AdditiveExpression  MultiplicativeExpression
+UnaryExpression         CastExpression      Primary
+PrimaryNoNewArray       Assignment          FieldAccess
+VariableDeclarator      Identifier          ClassInstanceCreationExpression
+Arguments               Literal             ClassType
+%type <type> Type   PrimitiveType   NumericType     IntegralType    ReferenceType
+
+
+%start Program
+
+%%
+
+// Consolidates surrounding code
+Program // Start of program
+    : CompilationUnit
+    {
+      $$ = $1;
+      if( before ){
+          cerr << endl;
+          $$->dump();
+        }
+
+        //do semantic analysis
+        $$->analyze();
+
+        if( after ){
+          cerr << endl;
+          $$->dump();
+        }
+
+        //generate code if no errors are present
+        if( !errors ){
+          $$->encode();
+        }else{
+          cerr << "Errors detected in code; code generation aborted\n";
+        }
+        //cleanup the AST
+        delete $$;
+    }
+    ;
+
+CompilationUnit // Node
+	: MainFunctionDeclaration
+	{
+        $$ = new AST_Program(NULL,$1,NULL);
+	}
+	| MainFunctionDeclaration ClassDeclarations
+	{
+        $$ = new AST_Program(NULL,$1,$2);
+	}
+    | ClassDeclarations MainFunctionDeclaration
+    {
+        $$ = new AST_Program(NULL,$2,$1);
+    }
+    | ClassDeclarations MainFunctionDeclaration ClassDeclarations
+    {
+        $$ = new AST_Program($1, $2, $3);
+    }
+	;
+
+//Shea
+MainFunctionDeclaration // MainFunction
+	: INT MAIN '(' ')' MainFunctionBody
+	{
+		$$ = new AST_MainFunction($5);//Use MainFunctionBody
+	}
+	;
+
+//Dupuis
+MainFunctionBody // StmtList
+	: MainBlock                         { $$ = $1; }
+	;
+
+ClassDeclarations
+    : ClassDeclaration ClassDeclarations
+    {
+        $$ = new AST_ClassList($1,$2);
+    }
+    | ClassDeclaration
+    {
+        $$ = new AST_ClassList($1,NULL);
+    }
+    ;
+
+ClassDeclaration
+    : CLASS Identifier ClassBody
+    {
+      $$ = new AST_ClassDeclaration($2,NULL,$3);
+    }
+    | CLASS Identifier EXTENDS ClassType ClassBody
+    {
+      $$ = new AST_ClassDeclaration($2,$4,$5);
+    }
+    ;
+
+ClassBody
+    : '{' ClassBodyDeclarations '}'
+    {
+        $$ = $2;
+    }
+    | '{' '}'               {/*Do nothing*/}
+    ;
+
+ClassBodyDeclarations
+    : ClassBodyDeclaration ClassBodyDeclarations
+    {
+        $$ = new AST_StatementList($1,$2);
+    }
+    | ClassBodyDeclaration
+    {
+        $$ = new AST_StatementList($1,NULL);
+    }
+    ;
+
+ClassBodyDeclaration
+    : ClassMemberDeclaration
+    {
+        $$ = $1;
+    }
+    | ';'                   {/*Do nothing*/}
+    ;
+
+ClassMemberDeclaration
+    : FieldDeclaration
+    {
+      $$ = $1;
+    }
+    ;
+
+FieldDeclaration
+    : Type VariableDeclarators ';'
+    {
+      $$ = new AST_Declaration($1,$2);
+    }
+    ;
+
+//Main block containing multiple statements; defines outermost scope of a
+//function or class
+MainBlock // StatementList
+	: '{' MainBlockStatements '}'       { $$ = $2; }
+	//Means list could be length 0
+	| '{' '}'                           { $$ = NULL; }
+	;
+
+//List of primary statements within a block of code, e.g. function or class
+MainBlockStatements // StatementList
+	: MainBlockStatement MainBlockStatements // Right Recursive
+	{
+		$$ = new AST_StatementList($1,$2);
+	}
+	| MainBlockStatement
+	{
+		$$ = new AST_StatementList($1,NULL);
+	}
+	;
+
+//Levin
+MainBlockStatement //Statement
+	: MainVariableDeclarationStatement  { $$ = $1; }
+	| BlockStatement                    { $$ = $1; }
+	;
+
+//Shidlovsky
+MainVariableDeclarationStatement // MainDeclarationStatement
+	: MainVariableDeclaration ';'       { $$ = $1; }
+	;
+
+//Janowski
+MainVariableDeclaration // MainDeclarationStatement
+	: Type VariableDeclarators
+	{
+		$$ = new AST_Declaration($1,$2);
+	}
+	;
+
+//Carpio-Mazariegos
+VariableDeclarators // IDList
+  : VariableDeclarator ',' VariableDeclarators
+	{
+		$$ = new AST_VarList($1,$3);
+	}
+  | VariableDeclarator
+	{
+		$$ = new AST_VarList($1,NULL);
+	}
+  ;
+
+//"...a definition declaring an identifier"
+//Satisfies left-hand of variable_declarators
+VariableDeclarator // ID
+  : Identifier              { $$ = $1; }
+  ;
+
+//"...only containing executable code"
+Statement // Type: Statement
+    : Block                 { $$ = $1; }
+    | EmptyStatement        { $$ = $1; }
+    | ExpressionStatement   { $$ = $1; }
+    | IfThenElseStatement   { $$ = $1; }
+    | WhileStatement        { $$ = $1; }
+    | ReturnStatement       { $$ = $1; }
+    | OutStatement          { $$ = $1; }
+    | BreakStatement        { $$ = $1; }
+    | ContinueStatement     { $$ = $1; }
+    ;
+
+//A block is a sequence of statements within braces.
+Block
+    : '{' BlockStatements '}'
+    {
+      $$ = new AST_Block($2);
+    }
+    | '{' '}'
+    {
+      $$ = new AST_Block(NULL); //
+    }
+    ;
+
+//Defines any scope, e.g. if, while, {a=b+c;},...
+BlockStatements //StatementList
+  : BlockStatement BlockStatements
+  {
+    $$ = new AST_StatementList($1,$2);
+  }
+  | BlockStatement
+  {
+    $$ = new AST_StatementList($1,NULL);
+  }
+  ;
+
+BlockStatement
+    : Statement
+    {
+      $$ = $1;
+    }
+    ;
+
+IfThenElseStatement
+    : IF ParenExpression Statement ELSE Statement
+    {
+      $$ = new AST_IfThenElseStatement($2,$3,$5);
+    }
+    ;
+
+/*
+A while statement is executed by first evaluating the Expression.
+Execution continues by making a choice based on the resulting value:
+*/
+WhileStatement
+    : WHILE ParenExpression Statement
+    {
+      $$ = new AST_WhileStatement($2,$3);
+    }
+    ;
+
+ReturnStatement
+    : RETURN Expression ';'
+    {
+      $$ = new AST_ReturnStatement($2);
+    }
+    | RETURN ';'
+    {
+      $$ = new AST_ReturnStatement(NULL);
+    }
+    ;
+
+BreakStatement
+    : BREAK ';'
+    {
+      $$ = new AST_BreakStatement();
+    }
+    ;
+
+ContinueStatement
+    : CONTINUE ';'
+    {
+      $$ = new AST_ContinueStatement();
+    }
+    ;
+
+/* An empty statement does nothing. */
+EmptyStatement
+    : ';'
+    {
+      $$ = new AST_EmptyStatement();
+    }
+    ;
+
+//Handles printing statements
+OutStatement // Type: Statement
+	: OUT Expression ';'
+	{
+    //Drops the 'OUT' keyword; could be done in Statement instead
+		$$ = new AST_OutStatement($2);
+	}
+	;
+
+//Pitchai
+//Expression will be defined by individual sub-expressions
+ParenExpression // Type: Expression
+	: '(' Expression ')'    { $$ = $2; }
+	;
+
+/* Certain kinds of expressions may be used as statements by following them with semicolons: */
+ExpressionStatement	//Type: ExpStmt
+	: StatementExpression ';'
+	{
+		$$ = new AST_ExpressionStatement($1);
+	}
+	;
+
+//Ma
+StatementExpression // Type: ExpressionStatement
+	: Assignment	        { $$ = $1; }
+	;
+
+//Shrestha
+Expression	// Type: Expression
+	: AssignmentExpression  { $$ = $1;	}
+	;
+
+//Mihtsentu
+AssignmentExpression	// Type: Expression
+	: Assignment            { $$ = $1;	}
+	| EqualityExpression    { $$ = $1; }
+	;
+
+//Liu
+Assignment	// Type: Statement
+    : LeftHandSide AssignmentOperator AssignmentExpression
+	{
+		$$ = new AST_Assignment($1,$3);
+	}
+	;
+
+//Rajappan
+LeftHandSide	// Type: id or variable
+	: Identifier            { $$ = $1;	}
+	| FieldAccess           { $$ = $1; }
+	;
+
+//Hou
+EqualityExpression	//Type: Expression
+	: EqualityExpression EQ_OP RelationalExpression
+	{
+		$$ = new AST_EqualityExpression($1,$3);
+	}
+	| RelationalExpression  { $$ = $1;	}
+	;
+
+//Sun
+RelationalExpression	//Type: Expression
+	: RelationalExpression '<' AdditiveExpression
+	{
+		$$ = new AST_LessThan($1,$3);
+	}
+	| RelationalExpression '>' AdditiveExpression
+	{
+		$$ = new AST_GreaterThan($1,$3);
+	}
+	| AdditiveExpression    { $$ = $1;	}
+	;
+
+//Heidari
+AdditiveExpression	//Type: Expression
+	: AdditiveExpression '+' MultiplicativeExpression
+	{
+		$$ = new AST_Add($1,$3);
+	}
+	| AdditiveExpression '-' MultiplicativeExpression
+	{
+		$$ = new AST_Subtract($1,$3);
+	}
+	| MultiplicativeExpression	{ $$ = $1; }
+	;
+
+MultiplicativeExpression	//Type: Expression
+	: MultiplicativeExpression '*' UnaryExpression
+	{
+		$$ = new AST_Multiply($1,$3);
+	}
+	| MultiplicativeExpression '/' UnaryExpression
+	{
+		$$ = new AST_Divide($1,$3);
+	}
+	| UnaryExpression       { $$ = $1;	}
+	;
+
+UnaryExpression		//Type: Expression
+	: '-' UnaryExpression
+	{
+		$$ = new AST_Negate($2);
+	}
+	| '!' UnaryExpression
+	{
+		$$ = new AST_LogicalNot($2);
+	}
+	| CastExpression        { $$ = $1;	}
+	;
+
+CastExpression	//Type: Expression
+	: ParenExpression CastExpression
+	{
+        $$ = $1;
+	}
+	| Primary               { $$ = $1; }
+    ;
+
+Primary // Type: expression
+	: Identifier            { $$ = $1; }
+	| PrimaryNoNewArray     { $$ = $1; }
+	;
+
+PrimaryNoNewArray	//Type: expression
+	: ParenExpression                   { $$ = $1; }
+    | THIS                              { $$ = new AST_This(); }
+    | FieldAccess                       { $$ = $1; }
+    | ClassInstanceCreationExpression   { $$ = $1; }
+    | Literal                           { $$ = $1; }
+	;
+
+ClassInstanceCreationExpression
+    : NEW ClassType Arguments
+    {
+      $$ = new AST_ClassCreationExp( $2, $3 );
+    }
+    ;
+
+FieldAccess
+    : Primary '.' Identifier
+    {
+      $$ = new AST_FieldAccess($1,$3);
+    }
+    ;
+
+Arguments
+    : '(' ')'               {/*Do nothing for Phase 3*/}
+    ;
+
+AssignmentOperator	//Type: operator
+	: '='                   {/*Do nothing*/}
+	;
+
+Type			//Type: Type
+ 	: PrimitiveType         { $$ = $1; }
+ 	| ReferenceType         { $$ = $1; }
+	;
+
+PrimitiveType		//Type: Type
+	: NumericType           { $$ = $1; }
+  /*  | ReferenceType //For objects*/
+	;
+
+NumericType		//Type: Type
+	: IntegralType          { $$ = $1; }
+	;
+
+IntegralType		//Type: Type
+	: INT
+	{
+	    $$ = types->intType();
+    }
+	;
+
+ReferenceType
+    : ClassType
+    {
+        $$ = $1;
+    }
+    ;
+
+ClassType
+    : Identifier
+    {
+      $$ = $1;
+    }
+    ;
+
+//'could be a var; could be part of a declaration'L
+Identifier		//Type: expression
+	: IDENTIFIER
+	{
+		$$ = new AST_Variable($1);
+	}
+	;
+
+//This is like the use of '42' in an expression
+Literal			//Type: Literal
+	: INTEGER_LITERAL
+	{
+		$$ = new AST_IntegerLiteral($1);
+	}
+	| NULL_LITERAL
+	{
+        $$ = new AST_NullLiteral();
+	}
+	;
+
+//Phase 3
+
+%%
+
+void yyerror(const char *s){
+  cerr << getCurrentSourceLineNumber() << ": parse error" << endl;
+}

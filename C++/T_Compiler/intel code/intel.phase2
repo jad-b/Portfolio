@@ -1,0 +1,56 @@
+
+if (exp) stmt1 else stmt2
+
+  <exp>
+  popl %eax
+  cmpl $0, %eax
+  je L1
+  <stmt1>
+  jmp L2
+L1:
+  <stmt2>
+L2:
+
+while (exp) stmt
+
+L1:
+  <exp>
+  popl %eax
+  cmpl $0, %eax
+  je L2
+  <stmt>
+  jmp L1
+L2:
+
+break
+
+  jmp LABEL
+
+  where LABEL is the exit label for the closest enclosing while loop,
+  ie L2 in the above code for while loop.
+
+continue
+
+  jmp LABEL
+
+  where LABEL is the continue label for the closest enclosing while loop,
+  ie L1 in the above code for while loop.
+
+return exp
+
+  <exp>
+  popl %eax
+  jmp LABEL
+
+  where LABEL is a label immediately preceding the epilogue code for the
+  main function or the enclosing method. (Note: we will not do methods
+  until later.)
+
+return
+
+  jmp LABEL
+
+  where LABEL is a label immediately preceding the epilogue code for the
+  enclosing constructor or destructor. (Note: we will not do constructors
+  and destructors until later.)
+

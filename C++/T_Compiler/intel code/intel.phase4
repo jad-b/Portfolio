@@ -1,0 +1,108 @@
+method call: (exp).method(arg1, arg2, ..., argn)
+
+  <encode exp>
+  <encode arg1>
+  <encode arg2>
+  ...
+  <encode argn>
+  pushl $[n+1]
+  call  RTS_reverseArgumentsOnStack
+  popl  %ecx                         # discard n+1 argument
+  pushl $[lineNumber]
+  call  RTS_checkForNullReference
+  popl  %ecx                         # discard line number
+  popl  %eax                         # get copy of "this" in eax
+  pushl %eax                         # put copy of "this" back on stack
+  movl  (%eax), %eax                 # put VMT pointer into eax
+  addl  $[methodOffset], %eax
+  movl  (%eax), %eax                 # put method address into eax
+  call  *%eax
+  addl  $[(n+1)*4], %esp             # deallocate arguments from stack
+  pushl %eax                         # leave method return value on top of stack
+
+creating a class instance: new A(arg1, arg2, ..., argn)
+
+  <encode arg1>
+  <encode arg2>
+  ...
+  <encode argn>
+  pushl $[n]
+  call  RTS_reverseArgumentsOnStack
+  popl  %ecx                         # discard n+1 argument
+  pushl $4                           # unit size to be used by calloc
+  pushl $[sizeOfObjectIn32BitWords]  # number of units to be allocated
+  call  calloc                       # address of new object returned in eax
+  addl  $8, %esp                     # deallocate arguments to calloc
+  cmpl  $0, %eax
+  jne   L1
+  pushl $[lineNumber]
+  call  RTS_outOfMemoryError
+L1:
+  movl  $[VMT], (%eax)
+  pushl %eax                         # pass the "this" pointer
+  call  [constructorName]
+  popl  %eax                         # get address of new object into eax
+  addl  $[n*4], %esp                 # deallocate arguments to constructor
+  pushl %eax
+
+the delete statement: delete exp
+
+  <encode exp>
+  pushl $[lineNumber]
+  call  RTS_checkForNullReference
+  popl  %ecx                         # discard line number
+  popl  %eax                         # get copy of object address in eax
+  pushl %eax
+  movl  (%eax), %eax                 # get VMT out of object
+  addl  $4, %eax                     # destructor is always in slot 1
+  movl  (%eax), %eax                 # get destructor address from VMT
+  call  *%eax
+  call  free                         # address of object is still on stack
+  addl  $4, %esp
+
+method body
+
+  .align  4
+  .globl  [mungedName]
+[mungedName]:
+  pushl   %ebp                       # save old frame pointer
+  movl    %esp, %ebp                 # establish new frame pointer
+  <encode body>
+  movl    $0, %eax
+[mungedName$exit]:
+  popl    %ebp                       # restore caller's frame pointer
+  ret                                # restore caller's program counter
+
+constructor/destructor body
+
+  like method except may need to insert call to superclass
+  constructor/destructor
+
+generating a VMT
+
+  .data
+  [class]$VMT:
+  .long [superVMT]
+  .long [class]$destructor
+  .long [class$mungedMethodName1]
+  .long [class$mungedMethodName2]
+  ...
+  .text
+
+this/super
+
+  movl  8(%ebp), %eax                # 8(%ebp) is the "this" pointer
+  pushl %eax
+
+method parameter
+
+  leal  [((paramPosition-1)*4)+12](%ebp), %eax  # assuming first position is 1
+  pushl %eax
+
+field name
+
+  movl  8(%ebp), %eax                # 8(%ebp) is the "this" pointer
+  addl  $[fieldOffet], %eax
+  pushl %eax
+
+

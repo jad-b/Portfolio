@@ -1,0 +1,12 @@
+The TC Compiler
+*--------------*
+Jeremy Dobbins-Bucklad
+Spring 13
+Compilers, CS 712
+
+Phase 2:
+--------
+What Works:
+o Fixed scanning errors from Phase 1
+o Compiler successfully compiles two provided test files (p4.t,p5.t)
+o Works with nested while/if-else statements

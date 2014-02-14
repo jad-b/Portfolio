@@ -1,0 +1,154 @@
+%{
+
+// Jan 2008
+// grammar for the Simp language
+
+#include <iostream>
+using namespace std;
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stddef.h>
+
+#include "AST.h"
+#include "Type.h"
+
+// this routine is in scan.ll
+int getCurrentSourceLineNumber();
+
+// type module is in main.cxx
+extern TypeModule* types;
+
+void yyerror(const char *);
+extern int yyparse(void);
+extern int yylex(void);
+
+%}
+
+%union {
+        int value;
+        char* str;
+        AST_Node* node;
+        AST_StatementList* statementList;
+        AST_Statement* statement;
+        AST_Expression* expression;
+};
+
+%token <value> INTEGER_LITERAL
+%token <str> IDENTIFIER
+%token '/'
+%token '='
+%token INT
+%token FLOAT
+%token PRINT
+%token ';'
+%token '('
+%token ')'
+%token BAD
+
+%type <node> program
+%type <statementList> statement_list
+%type <statement> statement
+%type <expression> expression
+%type <expression> divide_expression
+%type <expression> primary_expression
+%type <expression> variable
+
+%start program
+
+%%
+program
+  : statement_list
+  {
+    $$ = $1;
+
+    // do semantic analysis
+    $$->analyze();
+
+    // dump results for debugging
+    $$->dump();
+
+    // generate code
+    $$->encode();
+
+    // cleanup the AST
+    delete $$;
+  }
+  ;
+
+statement_list
+  : statement
+  {
+    $$ = new AST_StatementList($1, NULL);
+  }
+  | statement statement_list
+  {
+    $$ = new AST_StatementList($1, $2);
+  }
+  ;
+
+statement
+  : variable '=' expression ';'
+  {
+    $$ = new AST_Assignment((AST_Variable *) $1, $3);
+  }
+  | INT IDENTIFIER ';'
+  {
+    $$ = new AST_Declaration(types->intType(), $2);
+  }
+  | FLOAT IDENTIFIER ';'
+  {
+    $$ = new AST_Declaration(types->floatType(), $2);
+  }
+  | PRINT variable ';'
+  {
+    $$ = new AST_Print((AST_Variable *) $2);
+  }
+  ;
+
+expression
+  : divide_expression
+  {
+    $$ = $1;
+  }
+  ;
+
+divide_expression
+  : primary_expression
+  {
+    $$ = $1;
+  }
+  | divide_expression '/' primary_expression
+  {
+    $$ = new AST_Divide($1, $3);
+  }
+  ;
+
+primary_expression
+  : INTEGER_LITERAL
+  {
+    $$ = new AST_IntegerLiteral($1);
+  }
+  | variable
+  {
+    $$ = $1;
+  }
+  | '(' expression ')'
+  {
+    $$ = $2;
+  }
+  ;
+
+variable
+  : IDENTIFIER
+  {
+    $$ = new AST_Variable($1);
+  }
+  ;
+
+%%
+
+void yyerror(const char *s)
+{
+  cerr << getCurrentSourceLineNumber() << ": parse error" << endl;
+}

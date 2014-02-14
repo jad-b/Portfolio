@@ -1,0 +1,32 @@
+Jan 2008
+edited Aug 2008
+edited Jan 2011
+
+This directory contains the source code for a compiler for a very
+simple language called Simp.
+
+The compiler reads a Simp program from stdin. And it writes a dump
+of the AST for the program (after semantic analysis) to stderr. The
+AST is dumped in prefix form, one AST node per line.
+
+To build the compiler: make
+
+To run the compiler: simpc <input.simp >output.s
+
+To assembly and link the output of the compiler: gcc output.s RTS.c
+
+To build a stand-alone version of the scanner: make lexdbg
+
+To run the stand-alone scanner: lexdbg <input.simp
+
+The stand-alone scanner will read the input program from stdin and
+will write the tokens to stdout, one per line.
+
+simp.simp is a very simple Simp program that can be processed by
+the Simp compiler and has the extra benefit of revealing
+the meaning of the universe.
+
+test.simp is another Simp program that can be processed by the Simp compiler.
+
+bad.simp is a Simp program with semantic errors.
+

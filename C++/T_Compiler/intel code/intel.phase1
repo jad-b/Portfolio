@@ -1,0 +1,141 @@
+
+Assignment (=)
+
+  popl  %eax
+  popl  %edx
+  movl  %eax, (%edx)
+  pushl %eax
+
+Equality (==)
+
+  popl    %eax
+  popl    %edx
+  cmpl    %eax,%edx
+  sete    %al
+  movzbl  %al, %eax
+  pushl   %eax
+
+Greater than (>)
+
+  popl    %edx
+  popl    %eax
+  cmpl    %eax,%edx
+  setg    %al
+  movzbl  %al, %eax
+  pushl   %eax
+
+Subtract (binary -)
+
+  popl  %edx
+  popl  %eax
+  subl  %edx, %eax
+  pushl %eax
+
+Negate (unary -)
+  popl  %eax
+  negl  %eax
+  pushl %eax
+
+Less than (<)
+
+  popl    %edx
+  popl    %eax
+  cmpl    %eax,%edx
+  setl    %al
+  movzbl  %al, %eax
+  pushl   %eax
+
+Multiply (*)
+
+  popl   %eax
+  popl   %edx
+  imull  %edx, %eax
+  pushl  %eax
+
+Logical Complement (!)  [(!i) --> (i == 0)]
+
+  popl    %eax
+  cmpl    $0,%eax
+  sete    %al
+  movzbl  %al, %eax
+  pushl   %eax
+
+Note: Divide requires that you check if the divisor is zero before
+doing the division in order to catch a run-time error and print the
+appropriate error message. Testing whether a value on top of the stack
+is zero can be done like this:
+
+   popl %eax
+   cmpl $0, %eax
+   je LABEL
+
+So the code for divide ends up being:
+
+   popl  %ecx
+   cmpl  $0, %ecx
+   je    LABEL1
+   popl  %eax
+   cltd
+   idivl %ecx, %eax
+   pushl %eax
+   jmp   LABEL2
+LABEL1:
+   pushl $[lineNumber]
+   call  RTS_printDivideByZeroError
+LABEL2:
+
+   note: [lineNumber] is the line number that contains the divide operator
+
+Main Block Prologue
+
+   .text
+   .align 4
+   .globl main
+main:
+   pushl %ebp
+   movl %esp, %ebp
+
+Main Block Epilogue
+
+main$exit:
+  popl %ebp
+  ret
+
+Main Variable Declaration
+
+   .data
+mainvar$[name]: .long 0
+   .text
+
+   note: [name] stands for the name of the main variable
+
+Main Variable
+
+   pushl $mainvar$[name]
+
+   note: [name] stands for the name of the main variable
+
+Deref
+
+  popl %eax
+  movl (%eax), %eax
+  pushl %eax
+
+Integer Literal
+
+   pushl $[value]
+
+   note: [value] stands for the value of the integer literal
+
+Out Statement
+
+   call RTS_outputInteger
+   addl $4, %esp
+
+Expression Statement
+
+   addl $4, %esp
+
+   note: you need to pop the stack for expression statements, because the
+         expression value will be left on top of the stack.
+

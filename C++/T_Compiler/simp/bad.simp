@@ -1,0 +1,6 @@
+int i;
+float fx;
+i = 10;
+print i;
+f = i / (f / 5) / f;
+print f;

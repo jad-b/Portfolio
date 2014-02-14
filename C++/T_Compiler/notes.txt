@@ -1,0 +1,14 @@
+Notes
+-----
+
+****             ****
+    Common Errors
+====             ====
+
+"'AST_Whatever' does not name a type'"
+ - You have not yet declared AST_Whatever within AST.h
+
+"$# of 'BlahSomethingYeah' has no declared type'
+- You have not assigned BlahSomethingYeah to a type at the top of parse.yy
+  * Don't forget to check the # of $#!
+

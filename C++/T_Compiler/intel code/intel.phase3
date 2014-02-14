@@ -1,0 +1,66 @@
+null
+
+  pushl $0
+
+field reference
+
+  pushl $[lineNumber]
+  call  RTS_checkForNullReference
+  popl  %eax
+  popl  %eax
+  addl  $[offset], %eax
+  pushl %eax
+
+  note: [offset] stands for the offset of the field being referenced
+
+class cast
+
+  pushl $[VMT]
+  pushl $[lineNumber]
+  call  RTS_checkCast
+  addl  $8, %esp
+
+  note: [VMT] stands for the assembly language label for the VMT for
+        the destination class (being cast to).
+
+  note: [lineNumber] stands for the line number of the source line containing
+        the cast.
+
+  note: This assumes the following C prototype for the RTS_checkCast function:
+
+        void RTS_checkCast(int lineNumber, void* vmt, void* objectReference);
+
+creating a class instance
+
+  pushl $4
+  pushl $[length]
+  call  calloc
+  addl  $8, %esp
+  cmpl  $0, %eax
+  jne   L1
+  pushl $[lineNumber]
+  call  RTS_outOfMemoryError
+L1:
+  movl  $[VMT], (%eax)
+  pushl %eax
+
+  note: [length] stands for the length of the object in 4-byte words.
+
+  note: [VMT] stands for the assembly language label for the VMT for the class
+        of the instance being created.
+
+  note: [lineNumber] stands for the source line number of the line containing
+        the class instance creation expression.
+
+a VMT for each class, including Object
+
+  .data
+  [class]$VMT:
+  .long [superVMT]
+  .text
+
+  note: [class] stands for name of the class.
+
+  note: [superVMT] stands for the assembly language label for the VMT
+        of the super class.
+
